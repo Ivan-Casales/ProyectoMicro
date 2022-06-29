@@ -9,7 +9,26 @@
 
 .CSEG
 
+.equ	baud	= 9600			; baudrate (USART)
+.equ	bps	    = (F_CPU/16/baud) - 1	; baud prescale (USART)
+
+; init para la utilización del USART
+initUART:
+	sts	UBRR0L, r17			; load baud prescale
+	sts	UBRR0H, r18			; to UBRR0
+
+	ldi	r17, (1<<RXEN0)|(1<<TXEN0)	; enable transmitter
+	sts	UCSR0B, r17			; and receiver
+
+	ret					; return from subroutine
+
 start:
+    ; Configurar el USART
+    ldi	r17,LOW(bps)			; load baud prescale
+	ldi	r18,HIGH(bps)			; into r18:r17
+
+	rcall	initUART			; call init UART subroutine
+
     ; Inicializar sistema
 
     ldi     XL,     LOW(random_next)
@@ -318,6 +337,7 @@ start:
 	mov		r16,	r17
 	rcall	hamming_7_decode
 
+
 loop:
     rcall   generar_512
     rcall   suma_buffer
@@ -449,3 +469,61 @@ hamming_7_decode:
     pop     XH
     pop     XL
     ret
+
+pasar_dato:
+    push    r17
+putc:	    
+    lds	    17,     UCSR0A	    ; load UCSR0A into r17
+	sbrs	r17,    UDRE0		; wait for empty transmit buffer
+	rjmp	putc				; repeat loop
+
+	sts	    UDR0,   r16			; transmit character
+
+    pop     r17
+	ret					        ; return from subroutine
+
+pasar_buffer:
+    push    XH
+    push    XL
+    push    r16
+    push    r17
+    push    r18
+    push    r19
+    push    r20
+
+    ldi     r20,    4
+cuatro_veces:           ; Esta rutina debe ser ejecutada 4 veces para alcanzar los 512 bytes
+    ldi     r19,    128
+pasar_byte:             ; Dicha rutina pasa 128 bytes
+    ldi     XL,     LOW(buffer)
+    ldi     XH,     HIGH(buffer)
+    ld      r16,    X+     
+    rcall   hamming_7_encode
+    mov     r18,    r17
+
+    lsr     r16                ; Aplico shift a la derecha 4 veces
+    lsr     r16                ;   para obtener los 4 bits siguientes
+    lsr     r16
+    lsr     r16
+    
+    rcall   hamming_7_encode
+    mov     r16,    r17
+	rcall	putc				; transmit character
+    mov     r16,    r18
+	rcall	putc				; transmit character
+
+    dec     r19
+    brne    pasar_byte
+    dec     r20
+    brne    cuatro_veces
+
+    pop    XH
+    pop    XL
+    pop    r20
+    pop    r19
+    pop    r18
+    pop    r17
+    pop    r16
+    ret
+
+    
