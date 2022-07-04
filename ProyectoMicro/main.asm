@@ -470,17 +470,29 @@ hamming_7_decode:
     pop     XL
     ret
 
-pasar_dato:
+putc:	                    ; La rutina se encarga de enviar un byte
     push    r17
-putc:	    
+pasar_dato:
     lds	    17,     UCSR0A	    ; load UCSR0A into r17
 	sbrs	r17,    UDRE0		; wait for empty transmit buffer
-	rjmp	putc				; repeat loop
+	rjmp	pasar_dato			; repeat loop
 
 	sts	    UDR0,   r16			; transmit character
 
     pop     r17
 	ret					        ; return from subroutine
+
+getc:	                ; La rutina se encarga de recibir un byte
+    push    r17
+recibir_dato:
+    lds	    r17,    UCSR0A			; load UCSR0A into r17
+	sbrs	r17,    UDRE0			; wait for empty transmit buffer
+	rjmp	recibir_dato			; repeat loop
+
+	lds	UDR0,   r16			        ; get received character
+
+	ret					            ; return from subroutine
+
 
 pasar_buffer:
     push    XH
@@ -526,4 +538,23 @@ pasar_byte:             ; Dicha rutina pasa 128 bytes
     pop    r16
     ret
 
+recibir_buffer:
+    push    XH
+    push    XL
+    push    r16
+    push    r17
+    push    r18
+    push    r19
+    push    r20
+
+    rcall getc
+    rcall hamming_7_decode
     
+    pop    XH
+    pop    XL
+    pop    r20
+    pop    r19
+    pop    r18
+    pop    r17
+    pop    r16
+    ret
