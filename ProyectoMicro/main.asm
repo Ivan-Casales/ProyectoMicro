@@ -9,6 +9,7 @@
 
 .CSEG
 
+.equ F_CPU = 16000000
 .equ	baud	= 9600			; baudrate (USART)
 .equ	bps	    = (F_CPU/16/baud) - 1	; baud prescale (USART)
 
@@ -486,7 +487,7 @@ hamming_7_decode:
 putc:	                    ; La rutina se encarga de enviar un byte
     push    r17
 _wait_putc:
-    lds	    17,     UCSR0A	    ; load UCSR0A into r17
+    lds	    r17,     UCSR0A	    ; load UCSR0A into r17
 	sbrs	r17,    UDRE0		; wait for empty transmit buffer
 	rjmp	_wait_putc          ; repeat loop
 
@@ -502,7 +503,7 @@ _wait_getc:
 	sbrs	r17,    UDRE0			; wait for empty transmit buffer
 	rjmp	_wait_getc			; repeat loop
 
-	lds	UDR0,   r16			        ; get received character
+	lds	r16, UDR0			        ; get received character
 
     pop     r17
 	ret					            ; return from subroutine
