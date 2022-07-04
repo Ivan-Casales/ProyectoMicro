@@ -4,6 +4,7 @@
 .DSEG
     random_next:            .BYTE 1
     buffer:                 .BYTE 512
+	digitos: 				.BYTE 10
     hamming_7_decode_table: .BYTE 128
     hamming_7_encode_table: .BYTE 16
 
@@ -32,15 +33,383 @@ initUART:
 	ret
 
 start:
+    call    inicializar_sistema
     ; Configurar el USART
 	rcall	initUART			; call init UART subroutine
 
-    ; Inicializar sistema
+;configuro los puertos:
+;	PB2 PB3 PB4 PB5	- son los LEDs del shield
+;	PB0 es SD (serial data) para el display 7seg
+;	PD7 es SCLK, el reloj de los shift registers del display 7seg
+;	PD4 es LCH, transfiere los datos que ya ingresaron en serie, a la salida del registro paralelo
+;   PC son entradas para los botones
+    ldi		r16,	0b00111101
+	out		DDRB,	r16			;4 LEDs del shield son salidas
+	out		PORTB,	r16			;apago los LEDs
+	ldi		r16,	0b00000000
+	out		DDRC,	r16			;3 botones del shield son entradas
+	ldi		r16,	0b10010000
+	out		DDRD,	r16			;configuro PD.4 y PD.7 como salidas
+	cbi		PORTD,	7			;PD.7 a 0, es el reloj serial, inicializo a 0
+	cbi		PORTD,	4			;PD.4 a 0, es el reloj del latch, inicializo a 0
+
+apagar:		; apaga todo el display de 7 segmentos
+	ldi		r16,	0b11111111
+	ldi		r17,	0b11110000
+	call	sacanum
+
+    ldi     r16,    13
+    rcall   hamming_7_encode
+	mov		r16,	r17
+	rcall	hamming_7_decode
+
+    rcall   generar_512
+    rcall   suma_buffer
+loop:
+
+.IFDEF ESCLAVO
+    ldi     r16, 0
+    rcall getc
+    rcall display_numero
+.ELSE
+    ldi     r16, 169
+    rcall   putc
+.ENDIF
+
+    rjmp    loop
+
+suma_buffer:
+    push    XH
+    push    XL
+    push    r17
+    push    r18
+
+    ldi     XL,     LOW(buffer)
+    ldi     XH,     HIGH(buffer)
+
+    ldi     r16,    0
+    ldi     r17,    128
+_suma_buffer_loop:
+    ld      r18,    X+
+    add     r16,    r18
+
+    ld      r18,    X+
+    add     r16,    r18
+
+    ld      r18,    X+
+    add     r16,    r18
+
+    ld      r18,    X+
+    add     r16,    r18
+
+    dec     r17
+    brne    _suma_buffer_loop
+
+    pop     r18
+    pop     r17
+    pop     XL
+    pop     XH
+    ret
+
+generar_512:
+    push    XH
+    push    XL
+    push    r17
+    push    r16
+
+    ldi     XL,     LOW(buffer)
+    ldi     XH,     HIGH(buffer)
+
+    ldi     r17,    128
+_generar_512_loop:
+    rcall   random
+    st      X+,     r16
+    rcall   random
+    st      X+,     r16
+    rcall   random
+    st      X+,     r16
+    rcall   random
+    st      X+,     r16
+
+    dec     r17
+    brne    _generar_512_loop
+
+    pop     r16
+    pop     r17
+    pop     XL
+    pop     XH
+    ret
+
+random:
+    push    r17
+    push    XH
+    push    XL
+
+    ldi     XL,     LOW(random_next)
+    ldi     XH,     HIGH(random_next)
+    ld      r16,    X
+
+    rol     r16
+    rol     r16
+
+    ldi     r17,    199
+    eor     r16,    r17
+
+    rol     r16
+    ldi     r17,    101
+    eor     r16,    r17
+
+    ldi     r17, 5
+    add     r16, r17
+
+    st      X, r16
+
+    pop     XL
+    pop     XH
+    pop     r17
+    ret
+
+hamming_7_encode:
+    push    XL
+    push    XH
+
+    ldi     XL,     LOW(hamming_7_encode_table)
+    ldi     XH,     HIGH(hamming_7_encode_table)
+
+    mov     r17,    r16
+    andi    r17,    0b00001111
+    add     XL,     r17
+    ldi     r17,    0
+    adc     XH,     r17
+    ld      r17,    X
+
+    pop     XH
+    pop     XL
+    ret
+
+hamming_7_decode:
+    push    XL
+    push    XH
+
+    ldi     XL,     LOW(hamming_7_decode_table)
+    ldi     XH,     HIGH(hamming_7_decode_table)
+
+    mov     r17,    r16
+    andi    r17,    0b01111111
+    add     XL,     r17
+    ldi     r17,    0
+    adc     XH,     r17
+    ld      r17,    X
+
+    pop     XH
+    pop     XL
+    ret
+
+putc:	                    ; La rutina se encarga de enviar un byte
+    push    r17
+_wait_putc:
+    lds	    r17,     UCSR0A	    ; load UCSR0A into r17
+	sbrs	r17,    UDRE0		; wait for empty transmit buffer
+	rjmp	_wait_putc          ; repeat loop
+
+	sts	    UDR0,   r16			; transmit character
+
+    pop     r17
+	ret					        ; return from subroutine
+
+getc:	                ; La rutina se encarga de recibir un byte
+    push    r17
+_wait_getc:
+    lds	    r17,    UCSR0A			; load UCSR0A into r17
+	sbrs	r17,    UDRE0			; wait for empty transmit buffer
+	rjmp	_wait_getc			; repeat loop
+
+	lds	r16, UDR0			        ; get received character
+
+    pop     r17
+	ret					            ; return from subroutine
+
+
+pasar_buffer:
+    push    XH
+    push    XL
+    push    r16
+    push    r17
+    push    r18
+    push    r19
+    push    r20
+
+    ldi     r20,    4
+cuatro_veces:           ; Esta rutina debe ser ejecutada 4 veces para alcanzar los 512 bytes
+    ldi     r19,    128
+pasar_byte:             ; Dicha rutina pasa 128 bytes
+    ldi     XL,     LOW(buffer)
+    ldi     XH,     HIGH(buffer)
+    ld      r16,    X+
+    rcall   hamming_7_encode
+    mov     r18,    r17
+
+    lsr     r16                ; Aplico shift a la derecha 4 veces
+    lsr     r16                ;   para obtener los 4 bits siguientes
+    lsr     r16
+    lsr     r16
+
+    rcall   hamming_7_encode
+    mov     r16,    r17
+	rcall	putc				; transmit character
+    mov     r16,    r18
+	rcall	putc				; transmit character
+
+    dec     r19
+    brne    pasar_byte
+    dec     r20
+    brne    cuatro_veces
+
+    pop    XH
+    pop    XL
+    pop    r20
+    pop    r19
+    pop    r18
+    pop    r17
+    pop    r16
+    ret
+
+recibir_buffer:
+    push    XH
+    push    XL
+    push    r16
+    push    r17
+    push    r18
+    push    r19
+    push    r20
+
+    rcall getc
+    rcall hamming_7_decode
+
+    pop    XH
+    pop    XL
+    pop    r20
+    pop    r19
+    pop    r18
+    pop    r17
+    pop    r16
+    ret
+
+display_numero:
+	rcall 	div_10
+	mov   	r16, 	r24
+	ldi   	r17, 	0b00010000
+	rcall 	display_digit
+
+	mov		r16,	r25
+	rcall 	div_10
+	mov   	r16, 	r24
+	ldi   	r17, 	0b00100000
+	rcall 	display_digit
+
+	mov		r16,	r25
+	rcall 	div_10
+	mov   	r16, 	r24
+	ldi   	r17, 	0b01000000
+	rcall 	display_digit
+
+	; mov		r16,	r25
+	; rcall 	div_10
+	; mov   	r16, 	r24
+	; ldi   	r17, 	0b10000000
+	; rcall 	display_digit
+	ret
+
+; dado un número en r16:
+;	r24 es r16 % 10
+;	r25 es r16 / 10
+div_10:
+	mov 	r24, 	r16
+	ldi 	r25, 	0
+	rjmp 	div_10_comparar
+div_10_seguir:
+	inc 	r25
+	subi 	r24, 	10
+div_10_comparar:
+	cpi		r24, 	10
+	brsh 	div_10_seguir
+	ret
+
+; Muestra el dígito en r16  0 <= r16 <= 9,
+; r17 es el display a usar (ej: 0b00010000)
+display_digit:
+	push 	XL
+	push 	XH
+
+	ldi		XL,		LOW(digitos)
+	ldi		XH,		HIGH(digitos)
+	add		XL,		r16
+	clr		r16
+	adc		XH,		r16
+	ld 		r16,	X
+
+	pop		XH
+	pop		XL
+sacanum:
+	rcall	dato_serie
+	mov		r16, r17
+	rcall	dato_serie
+	sbi		PORTD, 4		;PD.4 a 1, es LCH el reloj del latch
+	cbi		PORTD, 4		;PD.4 a 0,
+	ret
+	;Voy a sacar un byte por el 7seg
+dato_serie:
+	push	r18
+
+	ldi		r18, 0x08		; lo utilizo para contar 8 (8 bits)
+loop_dato1:
+	cbi		PORTD, 7		;SCLK = 0 reloj en 0
+	lsr		r16				;roto a la derecha r16 y el bit 0 se pone en el C
+	brcs	loop_dato2		;salta si C=1
+	cbi		PORTB, 0		;SD = 0 escribo un 0
+	rjmp	loop_dato3
+loop_dato2:
+	sbi		PORTB, 0		;SD = 1 escribo un 1
+loop_dato3:
+	sbi		PORTD, 7		;SCLK = 1 reloj en 1
+	dec		r18
+	brne	loop_dato1; cuando r17 llega a 0 corta y vuelve
+
+	pop		r18
+	ret
+
+inicializar_sistema:
+    push    XL
+    push    XH
+    push    r16
 
     ldi     XL,     LOW(random_next)
     ldi     XH,     HIGH(random_next)
     ldi     r16,    1
     st      X,      r16
+
+	ldi		XL,		LOW(digitos)
+	ldi		XH,		HIGH(digitos)
+	ldi		r16,	0b00000011 ; 0
+	st		X+,		r16
+	ldi		r16,	0b10011111 ; 1
+	st		X+,		r16
+	ldi		r16,	0b00100101 ; 2
+	st		X+,		r16
+	ldi		r16,	0b00001101 ; 3
+	st		X+,		r16
+	ldi 	r16,	0b10011001 ; 4
+	st		X+,		r16
+	ldi		r16,	0b01001001 ; 5
+	st		X+,		r16
+	ldi		r16,	0b01000001 ; 6
+	st		X+,		r16
+	ldi		r16,	0b00011111 ; 7
+	st		X+,		r16
+	ldi		r16,	0b00000001 ; 8
+	st		X+,		r16
+	ldi		r16,	0b00011001 ; 9
+	st		X+,		r16
 
     ldi     XL,     LOW(hamming_7_decode_table)
     ldi     XH,     HIGH(hamming_7_decode_table)
@@ -338,238 +707,7 @@ start:
     ldi     r16, 0b01111111 ; Valor fuente: 1111
     st      X+,     r16
 
-    ldi     r16,    13
-    rcall   hamming_7_encode
-	mov		r16,	r17
-	rcall	hamming_7_decode
-
-
-loop:
-    rcall   generar_512
-    rcall   suma_buffer
-
-.IFDEF ESCLAVO
-    rcall getc
-.ELSE
-    ldi     r16, 123
-    rcall   putc
-.ENDIF
-
-    rjmp    loop
-
-suma_buffer:
-    push    XH
-    push    XL
-    push    r17
-    push    r18
-
-    ldi     XL,     LOW(buffer)
-    ldi     XH,     HIGH(buffer)
-
-    ldi     r16,    0
-    ldi     r17,    128
-_suma_buffer_loop:
-    ld      r18,    X+
-    add     r16,    r18
-
-    ld      r18,    X+
-    add     r16,    r18
-
-    ld      r18,    X+
-    add     r16,    r18
-
-    ld      r18,    X+
-    add     r16,    r18
-
-    dec     r17
-    brne    _suma_buffer_loop
-
-    pop     r18
-    pop     r17
-    pop     XL
-    pop     XH
-    ret
-
-generar_512:
-    push    XH
-    push    XL
-    push    r17
-    push    r16
-
-    ldi     XL,     LOW(buffer)
-    ldi     XH,     HIGH(buffer)
-
-    ldi     r17,    128
-_generar_512_loop:
-    rcall   random
-    st      X+,     r16
-    rcall   random
-    st      X+,     r16
-    rcall   random
-    st      X+,     r16
-    rcall   random
-    st      X+,     r16
-
-    dec     r17
-    brne    _generar_512_loop
-
-    pop     r16
-    pop     r17
-    pop     XL
-    pop     XH
-    ret
-
-random:
-    push    r17
-    push    XH
-    push    XL
-
-    ldi     XL,     LOW(random_next)
-    ldi     XH,     HIGH(random_next)
-    ld      r16,    X
-
-    rol     r16
-    rol     r16
-
-    ldi     r17,    199
-    eor     r16,    r17
-
-    rol     r16
-    ldi     r17,    101
-    eor     r16,    r17
-
-    ldi     r17, 5
-    add     r16, r17
-
-    st      X, r16
-
-    pop     XL
-    pop     XH
-    pop     r17
-    ret
-
-hamming_7_encode:
-    push    XL
-    push    XH
-
-    ldi     XL,     LOW(hamming_7_encode_table)
-    ldi     XH,     HIGH(hamming_7_encode_table)
-
-    mov     r17,    r16
-    andi    r17,    0b00001111
-    add     XL,     r17
-    ldi     r17,    0
-    adc     XH,     r17
-    ld      r17,    X
-
-    pop     XH
-    pop     XL
-    ret
-
-hamming_7_decode:
-    push    XL
-    push    XH
-
-    ldi     XL,     LOW(hamming_7_decode_table)
-    ldi     XH,     HIGH(hamming_7_decode_table)
-
-    mov     r17,    r16
-    andi    r17,    0b01111111
-    add     XL,     r17
-    ldi     r17,    0
-    adc     XH,     r17
-    ld      r17,    X
-
-    pop     XH
-    pop     XL
-    ret
-
-putc:	                    ; La rutina se encarga de enviar un byte
-    push    r17
-_wait_putc:
-    lds	    r17,     UCSR0A	    ; load UCSR0A into r17
-	sbrs	r17,    UDRE0		; wait for empty transmit buffer
-	rjmp	_wait_putc          ; repeat loop
-
-	sts	    UDR0,   r16			; transmit character
-
-    pop     r17
-	ret					        ; return from subroutine
-
-getc:	                ; La rutina se encarga de recibir un byte
-    push    r17
-_wait_getc:
-    lds	    r17,    UCSR0A			; load UCSR0A into r17
-	sbrs	r17,    UDRE0			; wait for empty transmit buffer
-	rjmp	_wait_getc			; repeat loop
-
-	lds	r16, UDR0			        ; get received character
-
-    pop     r17
-	ret					            ; return from subroutine
-
-
-pasar_buffer:
-    push    XH
-    push    XL
-    push    r16
-    push    r17
-    push    r18
-    push    r19
-    push    r20
-
-    ldi     r20,    4
-cuatro_veces:           ; Esta rutina debe ser ejecutada 4 veces para alcanzar los 512 bytes
-    ldi     r19,    128
-pasar_byte:             ; Dicha rutina pasa 128 bytes
-    ldi     XL,     LOW(buffer)
-    ldi     XH,     HIGH(buffer)
-    ld      r16,    X+
-    rcall   hamming_7_encode
-    mov     r18,    r17
-
-    lsr     r16                ; Aplico shift a la derecha 4 veces
-    lsr     r16                ;   para obtener los 4 bits siguientes
-    lsr     r16
-    lsr     r16
-
-    rcall   hamming_7_encode
-    mov     r16,    r17
-	rcall	putc				; transmit character
-    mov     r16,    r18
-	rcall	putc				; transmit character
-
-    dec     r19
-    brne    pasar_byte
-    dec     r20
-    brne    cuatro_veces
-
+    pop    r16
     pop    XH
     pop    XL
-    pop    r20
-    pop    r19
-    pop    r18
-    pop    r17
-    pop    r16
-    ret
-
-recibir_buffer:
-    push    XH
-    push    XL
-    push    r16
-    push    r17
-    push    r18
-    push    r19
-    push    r20
-
-    rcall getc
-    rcall hamming_7_decode
-
-    pop    XH
-    pop    XL
-    pop    r20
-    pop    r19
-    pop    r18
-    pop    r17
-    pop    r16
     ret
