@@ -14,19 +14,24 @@
 
 ; init para la utilización del USART
 initUART:
-	sts	UBRR0L, r17			; load baud prescale
-	sts	UBRR0H, r18			; to UBRR0
+    push    r17
+    push    r18
 
-	ldi	r17, (1<<RXEN0)|(1<<TXEN0)	; enable transmitter
-	sts	UCSR0B, r17			; and receiver
+    ldi	    r17,    LOW(bps)			; load baud prescale
+	ldi	    r18,    HIGH(bps)			; into r18:r17
 
-	ret					; return from subroutine
+	sts	    UBRR0L, r17			; load baud prescale
+	sts	    UBRR0H, r18			; to UBRR0
+
+	ldi	    r17, (1<<RXEN0)|(1<<TXEN0)	; enable transmitter
+	sts	    UCSR0B, r17			; and receiver
+
+    pop r18
+    pop r17
+	ret
 
 start:
     ; Configurar el USART
-    ldi	r17,LOW(bps)			; load baud prescale
-	ldi	r18,HIGH(bps)			; into r18:r17
-
 	rcall	initUART			; call init UART subroutine
 
     ; Inicializar sistema
@@ -472,10 +477,10 @@ hamming_7_decode:
 
 putc:	                    ; La rutina se encarga de enviar un byte
     push    r17
-pasar_dato:
+_wait_pasar_dato:
     lds	    17,     UCSR0A	    ; load UCSR0A into r17
 	sbrs	r17,    UDRE0		; wait for empty transmit buffer
-	rjmp	pasar_dato			; repeat loop
+	rjmp	_wait_pasar_dato    ; repeat loop
 
 	sts	    UDR0,   r16			; transmit character
 
@@ -509,7 +514,7 @@ cuatro_veces:           ; Esta rutina debe ser ejecutada 4 veces para alcanzar l
 pasar_byte:             ; Dicha rutina pasa 128 bytes
     ldi     XL,     LOW(buffer)
     ldi     XH,     HIGH(buffer)
-    ld      r16,    X+     
+    ld      r16,    X+
     rcall   hamming_7_encode
     mov     r18,    r17
 
@@ -517,7 +522,7 @@ pasar_byte:             ; Dicha rutina pasa 128 bytes
     lsr     r16                ;   para obtener los 4 bits siguientes
     lsr     r16
     lsr     r16
-    
+
     rcall   hamming_7_encode
     mov     r16,    r17
 	rcall	putc				; transmit character
@@ -549,7 +554,7 @@ recibir_buffer:
 
     rcall getc
     rcall hamming_7_decode
-    
+
     pop    XH
     pop    XL
     pop    r20
