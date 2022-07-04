@@ -346,6 +346,14 @@ start:
 loop:
     rcall   generar_512
     rcall   suma_buffer
+
+.IFDEF ESCLAVO
+    rcall getc
+.ELSE
+    ldi     r16, 123
+    rcall   putc
+.ENDIF
+
     rjmp    loop
 
 suma_buffer:
@@ -496,6 +504,7 @@ _wait_getc:
 
 	lds	UDR0,   r16			        ; get received character
 
+    pop     r17
 	ret					            ; return from subroutine
 
 
