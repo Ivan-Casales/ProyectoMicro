@@ -1,83 +1,46 @@
+; .SET ESCLAVO = 1
+
+.equ F_CPU  = 16000000
+.equ BAUD   = 9600
+.equ BPS    = (F_CPU / 16 / BAUD) - 1 ;  baud prescale (USART)
+
 .ORG 0x0000
     jmp start
 
 .DSEG
     random_next:            .BYTE 1
     buffer:                 .BYTE 512
+    buffer_suma:            .BYTE 512
 	digitos: 				.BYTE 10
     hamming_7_decode_table: .BYTE 128
     hamming_7_encode_table: .BYTE 16
 
 .CSEG
 
-.equ F_CPU = 16000000
-.equ	baud	= 9600			; baudrate (USART)
-.equ	bps	    = (F_CPU/16/baud) - 1	; baud prescale (USART)
-
-; init para la utilización del USART
-initUART:
-    push    r17
-    push    r18
-
-    ldi	    r17,    LOW(bps)			; load baud prescale
-	ldi	    r18,    HIGH(bps)			; into r18:r17
-
-	sts	    UBRR0L, r17			; load baud prescale
-	sts	    UBRR0H, r18			; to UBRR0
-
-	ldi	    r17, (1<<RXEN0)|(1<<TXEN0)	; enable transmitter
-	sts	    UCSR0B, r17			; and receiver
-
-    pop r18
-    pop r17
-	ret
-
 start:
     call    inicializar_sistema
-    ; Configurar el USART
-	rcall	initUART			; call init UART subroutine
-
-;configuro los puertos:
-;	PB2 PB3 PB4 PB5	- son los LEDs del shield
-;	PB0 es SD (serial data) para el display 7seg
-;	PD7 es SCLK, el reloj de los shift registers del display 7seg
-;	PD4 es LCH, transfiere los datos que ya ingresaron en serie, a la salida del registro paralelo
-;   PC son entradas para los botones
-    ldi		r16,	0b00111101
-	out		DDRB,	r16			;4 LEDs del shield son salidas
-	out		PORTB,	r16			;apago los LEDs
-	ldi		r16,	0b00000000
-	out		DDRC,	r16			;3 botones del shield son entradas
-	ldi		r16,	0b10010000
-	out		DDRD,	r16			;configuro PD.4 y PD.7 como salidas
-	cbi		PORTD,	7			;PD.7 a 0, es el reloj serial, inicializo a 0
-	cbi		PORTD,	4			;PD.4 a 0, es el reloj del latch, inicializo a 0
-
-apagar:		; apaga todo el display de 7 segmentos
-	ldi		r16,	0b11111111
-	ldi		r17,	0b11110000
-	call	sacanum
-
-    ldi     r16,    13
-    rcall   hamming_7_encode
-	mov		r16,	r17
-	rcall	hamming_7_decode
-
-    rcall   generar_512
-    rcall   suma_buffer
-loop:
 
 .IFDEF ESCLAVO
-    ldi     r16, 0
-    rcall getc
-    rcall display_numero
+    rcall   recibir_buffer
 .ELSE
-    ldi     r16, 169
-    rcall   putc
+    rcall   generar_512
+    rcall   pasar_buffer
 .ENDIF
+    rcall   suma_buffer
+
+    ldi     XL,     LOW(buffer_suma)
+    ldi     XH,     HIGH(buffer_suma)
+    st      X,      r16
+
+loop:
+    ldi     XL,     LOW(buffer_suma)
+    ldi     XH,     LOW(buffer_suma)
+    ld      r16,    X
+    rcall   display_numero
 
     rjmp    loop
 
+; Suma 'buffer' y retorna el resultado en r16
 suma_buffer:
     push    XH
     push    XL
@@ -240,9 +203,9 @@ pasar_buffer:
     push    r20
 
     ldi     r20,    4
-cuatro_veces:           ; Esta rutina debe ser ejecutada 4 veces para alcanzar los 512 bytes
+_cuatro_veces_pasar:    ; Esta rutina debe ser ejecutada 4 veces para alcanzar los 512 bytes
     ldi     r19,    128
-pasar_byte:             ; Dicha rutina pasa 128 bytes
+_pasar_byte_pasar:      ; Dicha rutina pasa 128 bytes
     ldi     XL,     LOW(buffer)
     ldi     XH,     HIGH(buffer)
     ld      r16,    X+
@@ -261,9 +224,9 @@ pasar_byte:             ; Dicha rutina pasa 128 bytes
 	rcall	putc				; transmit character
 
     dec     r19
-    brne    pasar_byte
+    brne    _pasar_byte_pasar
     dec     r20
-    brne    cuatro_veces
+    brne    _cuatro_veces_pasar
 
     pop    XH
     pop    XL
@@ -283,8 +246,31 @@ recibir_buffer:
     push    r19
     push    r20
 
-    rcall getc
-    rcall hamming_7_decode
+    ldi     XL,     LOW(buffer)
+    ldi     XH,     HIGH(buffer)
+
+    ldi     r20,    4
+_cuatro_veces_recibir:  ; Esta rutina debe ser ejecutada 4 veces para alcanzar los 512 bytes
+    ldi     r19,    128
+_pasar_byte_recibir:    ; Dicha rutina pasa 128 bytes
+    rcall   getc
+    rcall   hamming_7_decode
+    mov     r18,    r17
+
+    lsl     r18                ; Aplico shift a la derecha 4 veces
+    lsl     r18                ;   para obtener los 4 bits siguientes
+    lsl     r18
+    lsl     r18
+
+    rcall   getc
+    rcall   hamming_7_decode
+    or      r18, r17
+    st      X+, r18
+
+    dec     r19
+    brne    _pasar_byte_recibir
+    dec     r20
+    brne    _cuatro_veces_recibir
 
     pop    XH
     pop    XL
@@ -378,10 +364,51 @@ loop_dato3:
 	pop		r18
 	ret
 
+initUSART:
+    push    r17
+    push    r18
+
+    ldi	    r17,    LOW(bps)			    ; load baud prescale
+	ldi	    r18,    HIGH(bps)			    ; into r18:r17
+
+	sts	    UBRR0L, r17			            ; load baud prescale
+	sts	    UBRR0H, r18			            ; to UBRR0
+
+	ldi	    r17,    (1<<RXEN0)|(1<<TXEN0)	; enable transmitter
+	sts	    UCSR0B, r17			            ; and receiver
+
+    pop r18
+    pop r17
+	ret
+
+initDISPLAY:
+    push    r16
+    push    r17
+
+    ldi		r16,	0b00111101
+	out		DDRB,	r16			;4 LEDs del shield son salidas
+	out		PORTB,	r16			;apago los LEDs
+	ldi		r16,	0b00000000
+	out		DDRC,	r16			;3 botones del shield son entradas
+	ldi		r16,	0b10010000
+	out		DDRD,	r16			;configuro PD.4 y PD.7 como salidas
+	cbi		PORTD,	7			;PD.7 a 0, es el reloj serial, inicializo a 0
+	cbi		PORTD,	4			;PD.4 a 0, es el reloj del latch, inicializo a 0
+	ldi		r16,	0b11111111
+	ldi		r17,	0b11110000
+	call	sacanum
+
+    pop     r17
+    pop     r16
+    ret
+
 inicializar_sistema:
     push    XL
     push    XH
     push    r16
+
+    rcall   initUSART
+    rcall   initDISPLAY
 
     ldi     XL,     LOW(random_next)
     ldi     XH,     HIGH(random_next)
