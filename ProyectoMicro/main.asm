@@ -477,10 +477,10 @@ hamming_7_decode:
 
 putc:	                    ; La rutina se encarga de enviar un byte
     push    r17
-_wait_pasar_dato:
+_wait_putc:
     lds	    17,     UCSR0A	    ; load UCSR0A into r17
 	sbrs	r17,    UDRE0		; wait for empty transmit buffer
-	rjmp	_wait_pasar_dato    ; repeat loop
+	rjmp	_wait_putc          ; repeat loop
 
 	sts	    UDR0,   r16			; transmit character
 
@@ -489,10 +489,10 @@ _wait_pasar_dato:
 
 getc:	                ; La rutina se encarga de recibir un byte
     push    r17
-recibir_dato:
+_wait_getc:
     lds	    r17,    UCSR0A			; load UCSR0A into r17
 	sbrs	r17,    UDRE0			; wait for empty transmit buffer
-	rjmp	recibir_dato			; repeat loop
+	rjmp	_wait_getc			; repeat loop
 
 	lds	UDR0,   r16			        ; get received character
 
