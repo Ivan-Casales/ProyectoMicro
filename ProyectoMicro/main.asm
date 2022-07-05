@@ -6,11 +6,19 @@
 
 .ORG 0x0000
     jmp start
+.ORG 0x0024
+    jmp USART0_RXC ; USART0, RX Complete Handler
+; .ORG 0x0026
+;     jmp USART0_UDRE ; USART0, UDR Empty Handler
+.ORG 0x0028
+    jmp USART0_TXC ; USART0, TX Complete Handle
 
 .DSEG
     random_next:            .BYTE 1
     buffer:                 .BYTE 512
-    buffer_suma:            .BYTE 512
+    tx_sec:                 .BYTE 1
+    tx_index:               .BYTE 2
+    suma:                   .BYTE 1
 	digitos: 				.BYTE 10
     hamming_7_decode_table: .BYTE 128
     hamming_7_encode_table: .BYTE 16
@@ -18,26 +26,18 @@
 .CSEG
 
 start:
-    call    inicializar_sistema
+    cli
+    call inicializar_sistema
+	rcall generar_512
 
-.IFDEF ESCLAVO
-    rcall   recibir_buffer
-.ELSE
-    rcall   generar_512
-    rcall   pasar_buffer
-.ENDIF
-    rcall   suma_buffer
-
-    ldi     XL,     LOW(buffer_suma)
-    ldi     XH,     HIGH(buffer_suma)
-    st      X,      r16
-
+    sei
+    ldi     r16, 153
+    sts     UDR0, r16
 loop:
-    ldi     XL,     LOW(buffer_suma)
-    ldi     XH,     LOW(buffer_suma)
+    ldi     XL,     LOW(suma)
+    ldi     XH,     LOW(suma)
     ld      r16,    X
     rcall   display_numero
-
     rjmp    loop
 
 ; Suma 'buffer' y retorna el resultado en r16
@@ -365,20 +365,20 @@ loop_dato3:
 	ret
 
 initUSART:
-    push    r17
-    push    r18
+    push    r16
 
-    ldi	    r17,    LOW(bps)			    ; load baud prescale
-	ldi	    r18,    HIGH(bps)			    ; into r18:r17
+    ldi	    r16,    LOW(bps)			    ; load baud prescale
+	sts	    UBRR0L, r16			            ; load baud prescale
+    ldi	    r16,    HIGH(bps)			    ; load baud prescale
+	sts	    UBRR0H, r16			            ; to UBRR0
 
-	sts	    UBRR0L, r17			            ; load baud prescale
-	sts	    UBRR0H, r18			            ; to UBRR0
+	ldi	    r16, (1 << RXEN0) | (1 << TXEN0) | (1 << RXCIE0) | (1 << TXCIE0) ; | (1 << UDRIE0)
+	sts	    UCSR0B, r16
 
-	ldi	    r17,    (1<<RXEN0)|(1<<TXEN0)	; enable transmitter
-	sts	    UCSR0B, r17			            ; and receiver
+    ; ldi     r16,    (1<<USBS0)|(3<<UCSZ00) ; Set frame format: 8data, 2stop bit
+    ; sts     UCSR0C, r16
 
-    pop r18
-    pop r17
+    pop r16
 	ret
 
 initDISPLAY:
@@ -402,6 +402,91 @@ initDISPLAY:
     pop     r16
     ret
 
+USART0_RXC:
+    push    r16
+    push    r17
+    push    XL
+    push    XH
+    in		r16,	SREG
+
+	lds	    r17,    UDR0
+    ldi     XL,     LOW(suma)
+    ldi     XH,     LOW(suma)
+    st      X,      r17
+
+    out		SREG,	r16
+    pop     XH
+    pop     XL
+    pop     r17
+    pop     r16
+    reti
+
+; USART0_UDRE:
+;     push    r16
+;     push    r17
+;     in		r16,	SREG
+;
+;     ldi     r17, 156
+; 	sts	    UDR0, r17
+;
+;     out		SREG,	r16
+;     pop     r17
+;     pop     r16
+;     reti
+
+USART0_TXC:
+    push    r16
+    push    XH
+    push    XL
+    push    YH
+    push    YL
+    push    r17
+    push    r18
+    push    r19
+    push    r20
+    push    r21
+    in		r16,	SREG
+
+    ld      r21, 152
+    sts     UDR0, r21
+
+;     ldi     YL,     LOW(tx_sec)
+;     ldi     YH,     HIGH(tx_sec)
+;     ld      r21,    Y
+;
+;     ldi     XL,     LOW(tx_index)
+;     ldi     XH,     HIGH(tx_index)
+;     ld      r17,    X+
+;     ld      r18,    X
+;
+;     ldi     YL,     LOW(buffer)
+;     ldi     YH,     HIGH(buffer)
+;     add     YL,     r17
+;     adc     YH,     r18
+;     ld      r20,    Y
+;
+;     cpi     r21,    0
+;     breq    _parte_baja
+;
+; _parte_baja:
+;     ld      r16,    X+
+;     rcall   hamming_7_encode
+;     mov     r18,    r17
+; _salir:
+
+    out		SREG,	r16
+    pop     r21
+    pop     r20
+    pop     r19
+    pop     r18
+    pop     r17
+    pop     YL
+    pop     YH
+    pop     XL
+    pop     XH
+    pop     r16
+    reti
+
 inicializar_sistema:
     push    XL
     push    XH
@@ -409,6 +494,17 @@ inicializar_sistema:
 
     rcall   initUSART
     rcall   initDISPLAY
+
+    ldi     XL,     LOW(tx_sec)
+    ldi     XH,     HIGH(tx_sec)
+    ldi     r16,    0
+    st      X,      r16
+
+    ldi     XL,     LOW(tx_index)
+    ldi     XH,     HIGH(tx_index)
+    ldi     r16,    0
+    st      X+,     r16
+    st      X+,     r16
 
     ldi     XL,     LOW(random_next)
     ldi     XH,     HIGH(random_next)
