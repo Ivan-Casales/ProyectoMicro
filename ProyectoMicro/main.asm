@@ -28,15 +28,12 @@
 start:
     cli
     call inicializar_sistema
+.IFNDEF ESCLAVO
 	rcall generar_512
-
+.ENDIF
     sei
-    ldi     r16, 153
-    sts     UDR0, r16
 loop:
-    ldi     XL,     LOW(suma)
-    ldi     XH,     LOW(suma)
-    ld      r16,    X
+    rcall   suma_buffer
     rcall   display_numero
     rjmp    loop
 
@@ -402,22 +399,86 @@ initDISPLAY:
     pop     r16
     ret
 
+rx_siguiente_nibble:
+	push    r16
+	push    r17
+	push    r18
+    push    XH
+    push    XL
+    push    YH
+    push    YL
+
+    ldi     XL,     LOW(tx_sec)
+    ldi     XH,     HIGH(tx_sec)
+    ld      r16,    X
+    cpi     r16,    0
+    breq    _rx_nibble_bajo
+_rx_nibble_alto:
+    ldi     XL,     LOW(tx_index)
+    ldi     XH,     HIGH(tx_index)
+    ld      r16,    X+
+    ld      r17,    X
+
+    ldi     XL,     LOW(buffer)
+    ldi     XH,     HIGH(buffer)
+    add     XL,     r16
+    adc     XH,     r17
+
+    ldi     r18,    1
+    add     r16,    r18
+    clr     r18
+    adc     r17,    r18
+    andi    r17,    0b00000001
+    ldi     YL,     LOW(tx_index)
+    ldi     YH,     HIGH(tx_index)
+    st      Y+,     r16
+    st      Y,      r17
+
+    ld      r18,    X
+    lds     r16,    UDR0
+    rcall   hamming_7_decode
+    lsl     r17
+    lsl     r17
+    lsl     r17
+    lsl     r17
+    or      r18,    r17
+    st      X,      r18
+    rjmp    _rx_siguiente_nibble_salir
+_rx_nibble_bajo:
+    ldi     XL,     LOW(tx_index)
+    ldi     XH,     HIGH(tx_index)
+    ld      r16,    X+
+    ld      r17,    X
+
+    ldi     XL,     LOW(buffer)
+    ldi     XH,     HIGH(buffer)
+    add     XL,     r16
+    adc     XH,     r17
+
+    lds     r16,    UDR0
+    rcall   hamming_7_decode
+    st      X,      r17
+_rx_siguiente_nibble_salir:
+    ldi     XL,     LOW(tx_sec)
+    ldi     XH,     HIGH(tx_sec)
+    ld      r16,    X
+    ldi     r17,    1
+    eor     r16,    r17
+    st      X,      r16
+    pop     YL
+    pop     YH
+    pop     XL
+    pop     XH
+	pop     r18
+	pop     r17
+	pop	    r16
+	ret
+
 USART0_RXC:
     push    r16
-    push    r17
-    push    XL
-    push    XH
     in		r16,	SREG
 
-	lds	    r17,    UDR0
-    ldi     XL,     LOW(suma)
-    ldi     XH,     LOW(suma)
-    st      X,      r17
-
     out		SREG,	r16
-    pop     XH
-    pop     XL
-    pop     r17
     pop     r16
     reti
 
@@ -434,56 +495,87 @@ USART0_RXC:
 ;     pop     r16
 ;     reti
 
-USART0_TXC:
-    push    r16
+tx_siguiente_nibble:
+	push    r16
+	push    r17
+	push    r18
     push    XH
     push    XL
     push    YH
     push    YL
-    push    r17
-    push    r18
-    push    r19
-    push    r20
-    push    r21
-    in		r16,	SREG
 
-    ldi      r21, 152
-    sts     UDR0, r21
+    ldi     XL,     LOW(tx_sec)
+    ldi     XH,     HIGH(tx_sec)
+    ld      r16,    X
+    cpi     r16,    0
+    breq    _nibble_bajo
+_nibble_alto:
+    ldi     XL,     LOW(tx_index)
+    ldi     XH,     HIGH(tx_index)
+    ld      r16,    X+
+    ld      r17,    X
 
-;     ldi     YL,     LOW(tx_sec)
-;     ldi     YH,     HIGH(tx_sec)
-;     ld      r21,    Y
-;
-;     ldi     XL,     LOW(tx_index)
-;     ldi     XH,     HIGH(tx_index)
-;     ld      r17,    X+
-;     ld      r18,    X
-;
-;     ldi     YL,     LOW(buffer)
-;     ldi     YH,     HIGH(buffer)
-;     add     YL,     r17
-;     adc     YH,     r18
-;     ld      r20,    Y
-;
-;     cpi     r21,    0
-;     breq    _parte_baja
-;
-; _parte_baja:
-;     ld      r16,    X+
-;     rcall   hamming_7_encode
-;     mov     r18,    r17
-; _salir:
+    ldi     XL,     LOW(buffer)
+    ldi     XH,     HIGH(buffer)
+    add     XL,     r16
+    adc     XH,     r17
 
-    out		SREG,	r16
-    pop     r21
-    pop     r20
-    pop     r19
-    pop     r18
-    pop     r17
+    ldi     r18,    1
+    add     r16,    r18
+    clr     r18
+    adc     r17,    r18
+    andi    r17,    0b00000001
+    ldi     YL,     LOW(tx_index)
+    ldi     YH,     HIGH(tx_index)
+    st      Y+,     r16
+    st      Y,      r17
+
+    ld      r16,    X
+    lsr     r16
+    lsr     r16
+    lsr     r16
+    lsr     r16
+    rcall   hamming_7_encode
+    sts     UDR0,   r17
+
+    rjmp    _tx_siguiente_nibble_salir
+_nibble_bajo:
+    ldi     XL,     LOW(tx_index)
+    ldi     XH,     HIGH(tx_index)
+    ld      r16,    X+
+    ld      r17,    X
+
+    ldi     XL,     LOW(buffer)
+    ldi     XH,     HIGH(buffer)
+    add     XL,     r16
+    adc     XH,     r17
+
+    ld      r16,    X
+    rcall   hamming_7_encode
+    sts     UDR0,   r17
+_tx_siguiente_nibble_salir:
+    ldi     XL,     LOW(tx_sec)
+    ldi     XH,     HIGH(tx_sec)
+    ld      r16,    X
+    ldi     r17,    1
+    eor     r16,    r17
+    st      X,      r16
     pop     YL
     pop     YH
     pop     XL
     pop     XH
+	pop     r18
+	pop     r17
+	pop	    r16
+	ret
+
+USART0_TXC:
+    push    r16
+    in		r16,	SREG
+
+    rcall   tx_siguiente_nibble
+
+    out		SREG,	r16
     pop     r16
     reti
 
