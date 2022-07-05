@@ -447,7 +447,7 @@ USART0_TXC:
     push    r21
     in		r16,	SREG
 
-    ld      r21, 152
+    ldi      r21, 152
     sts     UDR0, r21
 
 ;     ldi     YL,     LOW(tx_sec)
