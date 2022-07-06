@@ -1,5 +1,3 @@
-; .SET ESCLAVO = 1
-
 .equ F_CPU  = 16000000
 .equ BAUD   = 9600
 .equ BPS    = (F_CPU / 16 / BAUD) - 1 ;  baud prescale (USART)
@@ -30,12 +28,11 @@
 start:
     cli
     call inicializar_sistema
-.IFNDEF ESCLAVO
-	rcall generar_512
-.ENDIF
     sei
 loop:
-    rcall   suma_buffer
+    ldi     XL, LOW(suma)
+    ldi     XH, HIGH(suma)
+    ld      r16, X
     rcall   display_numero
     rjmp    loop
 
@@ -410,6 +407,21 @@ rx_siguiente_nibble:
     push    YH
     push    YL
 
+    ; Esto está repetido, pero bueh!
+    ldi     XL,     LOW(tx_index)
+    ldi     XH,     HIGH(tx_index)
+    ld      r16,    X+
+    ld      r17,    X
+
+    or      r16,    r17
+    cpi     r16,    0
+    brne    _rx_no_init
+    ldi     XL, LOW(suma)
+    ldi     XH, HIGH(suma)
+    ldi     r16, 0
+    st      X, r16
+_rx_no_init:
+
     ldi     XL,     LOW(tx_sec)
     ldi     XH,     HIGH(tx_sec)
     ld      r16,    X
@@ -445,6 +457,11 @@ _rx_nibble_alto:
     lsl     r17
     or      r18,    r17
     st      X,      r18
+    ldi     XL, LOW(suma)
+    ldi     XH, HIGH(suma)
+    ld     r16, X
+    add     r16, r18
+    st      X, r16
     rjmp    _rx_siguiente_nibble_salir
 _rx_nibble_bajo:
     ldi     XL,     LOW(tx_index)
@@ -479,6 +496,8 @@ _rx_siguiente_nibble_salir:
 USART0_RXC:
     push    r16
     in		r16,	SREG
+
+    rcall   rx_siguiente_nibble
 
     out		SREG,	r16
     pop     r16
