@@ -53,20 +53,6 @@ _suma_buffer_loop:
     ld      r18,    X+
     add     r16,    r18
 
-    ;; CAMBIAR
-	ldi     XL,     LOW(suma)
-    ldi     XH,     HIGH(suma)
-    st      X,      r16
-	ldi     XL,     LOW(random_next)
-    ldi     XH,     HIGH(random_next)
-	ldi		r16,	1
-    st      X,      r16
-    pop     r18
-    pop     r17
-    pop     XL
-    pop     XH
-    ret
-
     ld      r18,    X+
     add     r16,    r18
 
@@ -480,11 +466,13 @@ _rx_nibble_alto:
     lsl     r17
     or      r18,    r17
     st      X,      r18
-    ldi     XL,     LOW(suma)
-    ldi     XH,     HIGH(suma)
-    ld      r16,    X
-    add     r16,    r18
-    st      X,      r16
+
+    ; ldi     XL,     LOW(suma)
+    ; ldi     XH,     HIGH(suma)
+    ; ld      r16,    X
+    ; add     r16,    r18
+    ; st      X,      r16
+
     rjmp    _rx_siguiente_nibble_salir
 _rx_nibble_bajo:
     ldi     XL,     LOW(tx_index)
