@@ -559,7 +559,9 @@ _nibble_alto:
     add     r16,    r18
     clr     r18
     adc     r17,    r18
-    andi    r17,    0b00000001
+    ; andi    r17,    0b00000001
+    andi    r17,    0b00000000
+    andi    r16,    0b00000000
     ldi     YL,     LOW(tx_index)
     ldi     YH,     HIGH(tx_index)
     st      Y+,     r16
