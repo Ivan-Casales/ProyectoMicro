@@ -15,6 +15,7 @@
 
 .DSEG
     random_next:            .BYTE 1     ; Estado del generador de número aleatorio
+    transmitir:             .BYTE 1     ; Booleano que indica si transmitir o no
     buffer:                 .BYTE 512
     tx_sec:                 .BYTE 1     ; Dice que nibble se transmite (Low or High)
     tx_index:               .BYTE 2     ; Indice que apunta al byte que se está transmitiendo
@@ -63,6 +64,10 @@ _suma_buffer_loop:
 
     dec     r17
     brne    _suma_buffer_loop
+
+    ldi     XL,     LOW(suma)
+    ldi     XH,     HIGH(suma)
+    st      X,      r16
 
     pop     r18
     pop     r17
@@ -551,6 +556,16 @@ _nibble_alto:
     st      Y+,     r16
     st      Y,      r17
 
+    or      r16,    r17
+    cpi     r16,    0
+    brne    _tx_siguiente_nibble_continuar
+
+    ldi     XL,     LOW(transmitir)
+    ldi     XH,     HIGH(transmitir)
+    ldi     r16,    0
+    st      X,      r16
+
+_tx_siguiente_nibble_continuar:
     ld      r16,    X
     lsr     r16
     lsr     r16
@@ -592,11 +607,20 @@ _tx_siguiente_nibble_salir:
 
 USART0_TXC:
     push    r16
+    push    r17
     in		r16,	SREG
+
+    ldi     XL,     LOW(transmitir)
+    ldi     XH,     HIGH(transmitir)
+    ld      r17,    X
+    cpi     r17,    0
+    breq    _USART0_TXC_salir
 
     rcall   tx_siguiente_nibble
 
+_USART0_TXC_salir:
     out		SREG,	r16
+    pop     r17
     pop     r16
     reti
 
@@ -621,6 +645,10 @@ _pcint1_button_1:
 
     rcall   generar_512
     rcall   suma_buffer
+    ldi     XL,     LOW(transmitir)
+    ldi     XH,     HIGH(transmitir)
+    ldi     r17,    1
+    st      X,      r17
     rcall   tx_siguiente_nibble
 
 	pop		r17
@@ -642,6 +670,11 @@ inicializar_sistema:
 
     rcall   initUSART
     rcall   initDISPLAY
+
+    ldi     XL,     LOW(transmitir)
+    ldi     XH,     HIGH(transmitir)
+    ldi     r16,    0
+    st      X,      r16
 
     ldi     XL,     LOW(suma)
     ldi     XH,     HIGH(suma)
