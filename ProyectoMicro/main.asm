@@ -578,7 +578,7 @@ _nibble_alto:
     ldi     YL,     LOW(transmitir)
     ldi     YH,     HIGH(transmitir)
     ldi     r16,    0
-    st      X,      r16
+    st      Y,      r16
 
 _tx_siguiente_nibble_continuar:
     ld      r16,    X
