@@ -31,9 +31,9 @@ start:
     call inicializar_sistema
     sei
 loop:
-    ldi     XL, LOW(suma)
-    ldi     XH, HIGH(suma)
-    ld      r16, X
+    ldi     XL,     LOW(suma)
+    ldi     XH,     HIGH(suma)
+    ld      r16,    X
     rcall   display_numero
     rjmp    loop
 
@@ -480,11 +480,11 @@ _rx_nibble_alto:
     lsl     r17
     or      r18,    r17
     st      X,      r18
-    ; ldi     XL, LOW(suma)
-    ; ldi     XH, HIGH(suma)
-    ; ld     r16, X
-    ; add     r16, r18
-    ; st      X, r16
+    ldi     XL,     LOW(suma)
+    ldi     XH,     HIGH(suma)
+    ld      r16,    X
+    add     r16,    r18
+    st      X,      r16
     rjmp    _rx_siguiente_nibble_salir
 _rx_nibble_bajo:
     ldi     XL,     LOW(tx_index)
@@ -577,9 +577,7 @@ _nibble_alto:
     add     r16,    r18
     clr     r18
     adc     r17,    r18
-    ; andi    r17,    0b00000001
-    andi    r17,    0b00000000
-    andi    r16,    0b00000000
+    andi    r17,    0b00000001
     ldi     YL,     LOW(tx_index)
     ldi     YH,     HIGH(tx_index)
     st      Y+,     r16
@@ -589,8 +587,8 @@ _nibble_alto:
     cpi     r16,    0
     brne    _tx_siguiente_nibble_continuar
 
-    ldi     XL,     LOW(transmitir)
-    ldi     XH,     HIGH(transmitir)
+    ldi     YL,     LOW(transmitir)
+    ldi     YH,     HIGH(transmitir)
     ldi     r16,    0
     st      X,      r16
 
