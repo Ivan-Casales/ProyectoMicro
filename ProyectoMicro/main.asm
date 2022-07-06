@@ -658,6 +658,12 @@ _pcint1_button_1:
 	push    r17
 	push	r18
 
+    ldi     XL,     LOW(transmitir)
+    ldi     XH,     HIGH(transmitir)
+    ld      r17,    X
+    cpi     r17,    1
+    breq    _pcint1_button_1_salir
+
     rcall   generar_512
     rcall   suma_buffer
     ldi     XL,     LOW(transmitir)
@@ -666,8 +672,10 @@ _pcint1_button_1:
     st      X,      r17
     rcall   tx_siguiente_nibble
 
-	pop		r17
+_pcint1_button_1_salir:
+
 	pop		r18
+	pop		r17
 	rjmp	_pcint1_out
 
 
