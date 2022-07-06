@@ -53,6 +53,20 @@ _suma_buffer_loop:
     ld      r18,    X+
     add     r16,    r18
 
+    ;; CAMBIAR
+	ldi     XL,     LOW(suma)
+    ldi     XH,     HIGH(suma)
+    st      X,      r16
+	ldi     XL,     LOW(random_next)
+    ldi     XH,     HIGH(random_next)
+	ldi		r16,	1
+    st      X,      r16
+    pop     r18
+    pop     r17
+    pop     XL
+    pop     XH
+    ret
+
     ld      r18,    X+
     add     r16,    r18
 
@@ -97,6 +111,10 @@ _generar_512_loop:
 
     dec     r17
     brne    _generar_512_loop
+
+    ldi     XL,     LOW(buffer)
+    ldi     XH,     HIGH(buffer)
+    ld      r16,    X
 
     pop     r16
     pop     r17
