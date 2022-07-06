@@ -467,11 +467,11 @@ _rx_nibble_alto:
     or      r18,    r17
     st      X,      r18
 
-    ; ldi     XL,     LOW(suma)
-    ; ldi     XH,     HIGH(suma)
-    ; ld      r16,    X
-    ; add     r16,    r18
-    ; st      X,      r16
+    ldi     XL,     LOW(suma)
+    ldi     XH,     HIGH(suma)
+    ld      r16,    X
+    add     r16,    r18
+    st      X,      r16
 
     rjmp    _rx_siguiente_nibble_salir
 _rx_nibble_bajo:
@@ -509,15 +509,15 @@ USART0_RXC:
     in		r16,	SREG
 
     rcall   rx_siguiente_nibble
-    ldi     XL,     LOW(tx_index)
-    ldi     XH,     HIGH(tx_index)
-    ld      r16,    X+
-    ld      r17,    X
-    or      r16,    r17
-    cpi     r16,    0
-    brne    _USART0_RXC_salir
-    rcall   suma_buffer
-_USART0_RXC_salir:
+    ; ldi     XL,     LOW(tx_index)
+    ; ldi     XH,     HIGH(tx_index)
+    ; ld      r16,    X+
+    ; ld      r17,    X
+    ; or      r16,    r17
+    ; cpi     r16,    0
+    ; brne    _USART0_RXC_salir
+    ; rcall   suma_buffer
+; _USART0_RXC_salir:
 
     out		SREG,	r16
     pop     r16
