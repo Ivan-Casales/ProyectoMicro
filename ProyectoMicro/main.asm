@@ -6,6 +6,8 @@
 
 .ORG 0x0000
     jmp start
+.ORG 0x0008
+    jmp		_pcint1
 .ORG 0x0024
     jmp USART0_RXC ; USART0, RX Complete Handler
 ; .ORG 0x0026
@@ -579,13 +581,53 @@ USART0_TXC:
     pop     r16
     reti
 
+_pcint1:
+	push	r16
+	in		r16,	SREG
+
+	sbis	PINC,	1
+	rjmp	_pcint1_button_1
+
+	; sbis	PINC,	2
+	; rjmp	_pcint1_button_2
+
+_pcint1_out:
+	out		SREG,	r16
+	pop		r16
+	reti
+
+_pcint1_button_1:
+	push    r17
+	push	r18
+
+    rcall   generar_512
+    rcall   suma_buffer
+    rcall   tx_siguiente_nibble
+
+	pop		r17
+	pop		r18
+	rjmp	_pcint1_out
+
+
 inicializar_sistema:
     push    XL
     push    XH
     push    r16
 
+	ldi		r16,	0b00000000
+	out		DDRC,	r16			;3 botones del shield son entradas
+    ldi		r16,	0b00000010
+    sts		PCICR,  r16
+    ldi		r16,	0b00001110
+    sts		PCMSK1, r16
+
     rcall   initUSART
     rcall   initDISPLAY
+
+    ldi     XL,     LOW(suma)
+    ldi     XH,     HIGH(suma)
+    ldi     r16,    0
+    st      X,      r16
 
     ldi     XL,     LOW(tx_sec)
     ldi     XH,     HIGH(tx_sec)
