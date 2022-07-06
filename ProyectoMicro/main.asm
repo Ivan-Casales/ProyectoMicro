@@ -7,21 +7,21 @@
 .ORG 0x0008
     jmp		_pcint1
 .ORG 0x0024
-    jmp USART0_RXC ; USART0, RX Complete Handler
+    jmp USART0_RXC ; USART0, RX Complete Handler    (input, PD0)
 ; .ORG 0x0026
 ;     jmp USART0_UDRE ; USART0, UDR Empty Handler
 .ORG 0x0028
-    jmp USART0_TXC ; USART0, TX Complete Handle
+    jmp USART0_TXC ; USART0, TX Complete Handle     (Output, PD1)
 
 .DSEG
-    random_next:            .BYTE 1
+    random_next:            .BYTE 1     ; Estado del generador de número aleatorio
     buffer:                 .BYTE 512
-    tx_sec:                 .BYTE 1
-    tx_index:               .BYTE 2
-    suma:                   .BYTE 1
-	digitos: 				.BYTE 10
-    hamming_7_decode_table: .BYTE 128
-    hamming_7_encode_table: .BYTE 16
+    tx_sec:                 .BYTE 1     ; Dice que nibble se transmite (Low or High)
+    tx_index:               .BYTE 2     ; Indice que apunta al byte que se está transmitiendo
+    suma:                   .BYTE 1     ; Suma de los bytes del buffer
+	digitos: 				.BYTE 10    ; Secuencia de bits que realiza el dibujo en el display
+    hamming_7_decode_table: .BYTE 128   ; Tabla para decodificar en hamming 7
+    hamming_7_encode_table: .BYTE 16    ; Tabla para codificar en hamming 7
 
 .CSEG
 
